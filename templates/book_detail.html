@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}{{ row.title }} - 书籍详情{% endblock %}
+{% block content %}
+<section class="page-head"><h1>{{ row.title }}</h1><a class="button" href="{{ url_for('notes') }}">记录读书感悟</a></section>
+<form class="form panel" method="post">
+  <label>书名<input name="title" value="{{ row.title or '' }}" required></label><label>作者<input name="author" value="{{ row.author or '' }}"></label>
+  <label>ISBN<input name="isbn" value="{{ row.isbn or '' }}"></label><label>出版社<input name="publisher" value="{{ row.publisher or '' }}"></label>
+  <label>出版时间<input name="published_at" value="{{ row.published_at or '' }}"></label><label>传统分类<input name="category" value="{{ row.category or '' }}"></label>
+  <label>当前关系<select name="relationship_status">{% for s in relationships %}<option value="{{ s }}" {% if row.relationship_status==s %}selected{% endif %}>{{ s or '未判断' }}</option>{% endfor %}</select></label>
+  <label>阅读状态<select name="reading_status">{% for s in reading_statuses %}<option value="{{ s }}" {% if row.reading_status==s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></label>
+  <label>阅读优先级<select name="priority">{% for s in priorities %}<option value="{{ s }}" {% if row.priority==s %}selected{% endif %}>{{ s or '未判断' }}</option>{% endfor %}</select></label>
+  <label>开始时间<input name="start_date" value="{{ row.start_date or '' }}"></label><label>完成时间<input name="finish_date" value="{{ row.finish_date or '' }}"></label>
+  <label>关联问题<select name="problem_id"><option value="">新增关联</option>{% for p in problems %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}</select></label>
+  <label>它可能解决的问题<textarea name="problem_statement" rows="3">{{ row.problem_statement or '' }}</textarea></label>
+  <label>个人备注<textarea name="user_note" rows="3">{{ row.user_note or '' }}</textarea></label><label>书籍简介<textarea name="description" rows="3">{{ row.description or '' }}</textarea></label>
+  <label class="check"><input type="checkbox" name="is_read" value="1" {% if row.is_read %}checked{% endif %}> 已读过</label>
+  <button class="button primary">保存书籍</button>
+</form>
+<section class="two-col">
+  <div class="panel"><h2>已关联问题</h2>{% for p in linked %}<span class="pill">{{ p }}</span>{% else %}<p class="empty">未关联。</p>{% endfor %}</div>
+  <div class="panel"><h2>读书感悟</h2>{% for n in notes %}<span class="list-row"><strong>{{ n.chapter_or_page or '' }}</strong><small>{{ (n.source_idea or '')[:100] }}</small></span>{% else %}<p class="empty">还没有感悟。</p>{% endfor %}</div>
+</section>
+{% endblock %}

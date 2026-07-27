@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}实践管理 - 实践型知识库{% endblock %}
+{% block content %}
+<section class="page-head"><h1>实践管理</h1><p>实践记录必须能回答：做了什么、结果如何、留下什么方法。</p></section>
+<form class="form panel" method="post">
+  <h2>新建实践</h2>
+  <label>标题<input name="title" required></label><label>状态<select name="status">{% for s in statuses %}<option value="{{ s }}">{{ s }}</option>{% endfor %}</select></label>
+  <label>关联内容<select name="content_id"><option value="">无</option>{% for r in contents_rows %}<option value="{{ r.id }}">{{ r.title }}</option>{% endfor %}</select></label>
+  <label>关联书籍<select name="book_id"><option value="">无</option>{% for r in books_rows %}<option value="{{ r.id }}">{{ r.title }}</option>{% endfor %}</select></label>
+  <label>关联读书感悟<select name="reading_note_id"><option value="">无</option>{% for r in notes_rows %}<option value="{{ r.id }}">{{ (r.source_idea or '')[:50] }}</option>{% endfor %}</select></label>
+  <label>关联问题<select name="problem_id"><option value="">无</option>{% for r in problems_rows %}<option value="{{ r.id }}">{{ r.name }}</option>{% endfor %}</select></label>
+  <label>想验证什么<textarea name="goal" rows="3"></textarea></label><label>最小测试方式<textarea name="minimum_test" rows="3"></textarea></label>
+  <label>成功标准<textarea name="success_criteria" rows="3"></textarea></label><label>预计投入<input name="estimated_effort"></label>
+  <button class="button primary">创建实践</button>
+</form>
+<section class="kanban">
+{% for s in statuses %}
+  <div class="lane"><h2>{{ s }}</h2>
+  {% for row in rows if row.status == s %}
+    <a class="card" href="{{ url_for('experiment_detail', experiment_id=row.id) }}"><strong>{{ row.title }}</strong><span>{{ row.problem_name or row.current_problem or '未关联问题' }}</span><small>{{ (row.minimum_test or '')[:80] }}</small></a>
+  {% endfor %}
+  </div>
+{% endfor %}
+</section>
+{% endblock %}

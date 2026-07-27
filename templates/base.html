@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}实践型知识库{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand">实践型知识库</div>
+    <nav>
+      <a href="{{ url_for('index') }}">首页</a>
+      <a href="{{ url_for('capture') }}">快速收藏</a>
+      <a href="{{ url_for('contents') }}">内容库</a>
+      <a href="{{ url_for('experiments') }}">实践</a>
+      <a href="{{ url_for('books') }}">书架</a>
+      <a href="{{ url_for('notes') }}">读书感悟</a>
+      <a href="{{ url_for('problems') }}">问题地图</a>
+      <a href="{{ url_for('export_page') }}">导出与备份</a>
+      <a href="{{ url_for('settings') }}">设置</a>
+    </nav>
+  </aside>
+  <main class="shell">
+    <header class="topbar">
+      <div class="search">
+        <input id="globalSearch" placeholder="搜索标题、问题、书籍、感悟、实践结论">
+        <div id="searchResults" class="search-results"></div>
+      </div>
+    </header>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="messages">
+          {% for category, message in messages %}
+            <div class="message {{ category }}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

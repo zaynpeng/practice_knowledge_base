@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}{{ row.title }} - 内容详情{% endblock %}
+{% block content %}
+<section class="page-head"><h1>{{ row.title }}</h1><div class="actions"><form method="post" action="{{ url_for('content_to_experiment', content_id=row.id) }}"><button class="button primary">转为实践</button></form><form method="post" action="{{ url_for('export_markdown', entity='content', entity_id=row.id) }}"><button class="button">导出 Markdown</button></form></div></section>
+<form class="form panel" method="post" enctype="multipart/form-data">
+  <h2>基本信息</h2>
+  <label>标题<input name="title" value="{{ row.title or '' }}"></label><label>类型<input name="content_type" value="{{ row.content_type or '' }}"></label>
+  <label class="wide">链接<input name="url" value="{{ row.url or '' }}"></label><label>作者<input name="author" value="{{ row.author or '' }}"></label>
+  <label>来源平台<input name="source_platform" value="{{ row.source_platform or '' }}"></label><label>发布时间<input name="published_at" value="{{ row.published_at or '' }}"></label>
+  <label>状态<select name="status">{% for s in statuses %}<option value="{{ s }}" {% if row.status==s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></label>
+  <h2 class="wide">AI 建议</h2>
+  <label>摘要<textarea name="summary" rows="4">{{ row.summary or '' }}</textarea></label><label>涉及工具<textarea name="tools" rows="4">{{ row.tools or '' }}</textarea></label>
+  <label>涉及方法<textarea name="methods" rows="4">{{ row.methods or '' }}</textarea></label><label>可能适用场景<textarea name="applicable_scenarios" rows="4">{{ row.applicable_scenarios or '' }}</textarea></label>
+  <label>建议分类<input name="suggested_category" value="{{ row.suggested_category or '' }}"></label>
+  <h2 class="wide">用户判断</h2>
+  <label class="important">我的感触<textarea name="user_reflection" rows="4">{{ row.user_reflection or '' }}</textarea></label>
+  <label class="important">我为什么收藏<textarea name="save_reason" rows="4">{{ row.save_reason or '' }}</textarea></label>
+  <label>它可能解决的问题<textarea name="problem_statement" rows="3">{{ row.problem_statement or '' }}</textarea></label><label>我准备怎么使用<textarea name="intended_use" rows="3">{{ row.intended_use or '' }}</textarea></label>
+  <label class="wide">正文<textarea name="raw_text" rows="8">{{ row.raw_text or '' }}</textarea></label>
+  <label>关联问题<select name="problem_id"><option value="">新增关联</option>{% for p in problems %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}</select></label>
+  <label>附件<input type="file" name="attachments" multiple></label>
+  <button class="button primary">保存修改</button>
+</form>
+<section class="two-col">
+  <div class="panel"><h2>已关联问题</h2>{% for p in linked %}<span class="pill">{{ p }}</span>{% else %}<p class="empty">未关联。</p>{% endfor %}</div>
+  <div class="panel"><h2>实践记录</h2>{% for e in experiments %}<a class="list-row" href="{{ url_for('experiment_detail', experiment_id=e.id) }}"><strong>{{ e.title }}</strong><span>{{ e.status }}</span></a>{% else %}<p class="empty">还没有实践。</p>{% endfor %}</div>
+</section>
+{% endblock %}

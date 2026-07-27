@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}{{ row.name }} - 问题详情{% endblock %}
+{% block content %}
+<section class="page-head"><h1>{{ row.name }}</h1></section>
+<form class="form panel" method="post">
+  <label>问题名称<input name="name" value="{{ row.name or '' }}" required></label><label>类型<input name="problem_type" value="{{ row.problem_type or '' }}"></label>
+  <label>重要程度<input name="importance" value="{{ row.importance or '' }}"></label><label>状态<select name="status">{% for s in statuses %}<option value="{{ s }}" {% if row.status==s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></label>
+  <label>描述<textarea name="description" rows="3">{{ row.description or '' }}</textarea></label><label>下一步行动<textarea name="next_action" rows="3">{{ row.next_action or '' }}</textarea></label>
+  <label class="wide">已有结论<textarea name="current_conclusion" rows="4">{{ row.current_conclusion or '' }}</textarea></label>
+  <button class="button primary">保存问题</button>
+</form>
+<section class="grid four">
+  <div class="panel"><h2>相关文章</h2>{% for r in contents %}<a class="list-row" href="{{ url_for('content_detail', content_id=r.id) }}"><strong>{{ r.title }}</strong></a>{% else %}<p class="empty">无</p>{% endfor %}</div>
+  <div class="panel"><h2>相关书籍</h2>{% for r in books %}<a class="list-row" href="{{ url_for('book_detail', book_id=r.id) }}"><strong>{{ r.title }}</strong></a>{% else %}<p class="empty">无</p>{% endfor %}</div>
+  <div class="panel"><h2>读书感悟</h2>{% for r in notes %}<span class="list-row"><strong>{{ r.book_title or '' }}</strong><small>{{ (r.source_idea or '')[:80] }}</small></span>{% else %}<p class="empty">无</p>{% endfor %}</div>
+  <div class="panel"><h2>实践</h2>{% for r in experiments %}<a class="list-row" href="{{ url_for('experiment_detail', experiment_id=r.id) }}"><strong>{{ r.title }}</strong><span>{{ r.status }}</span></a>{% else %}<p class="empty">无</p>{% endfor %}</div>
+</section>
+{% endblock %}

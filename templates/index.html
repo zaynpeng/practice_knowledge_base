@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}首页 - 实践型知识库{% endblock %}
+{% block content %}
+<section class="page-head">
+  <h1>今天先推动哪一个闭环？</h1>
+  <div class="actions">
+    <a class="button primary" href="{{ url_for('capture') }}">快速收藏链接</a>
+    <a class="button" href="{{ url_for('notes') }}">记录读书感悟</a>
+    <a class="button" href="{{ url_for('books') }}">录入一本书</a>
+  </div>
+</section>
+<section class="grid five">
+  <a class="metric" href="{{ url_for('contents', status='待补充') }}"><span>{{ stats.need_reason }}</span>待补充收藏原因</a>
+  <a class="metric" href="{{ url_for('contents', status='待判断') }}"><span>{{ stats.need_judge }}</span>待判断内容</a>
+  <a class="metric" href="{{ url_for('experiments') }}"><span>{{ stats.ready }}</span>准备实践</a>
+  <a class="metric" href="{{ url_for('experiments') }}"><span>{{ stats.doing }}</span>正在实践</a>
+  <a class="metric" href="{{ url_for('experiments') }}"><span>{{ stats.review }}</span>等待复盘</a>
+</section>
+<section class="two-col">
+  <div class="panel">
+    <h2>最近沉淀</h2>
+    {% for item in recent %}
+      <a class="list-row" href="{{ url_for('experiment_detail', experiment_id=item.id) }}">
+        <strong>{{ item.title }}</strong><span>{{ (item.reusable_conclusion or '')[:90] }}</span>
+      </a>
+    {% else %}
+      <p class="empty">还没有可复用结论。先完成一次最小测试。</p>
+    {% endfor %}
+  </div>
+  <div class="panel">
+    <h2>正在阅读</h2>
+    {% for book in reading %}
+      <a class="list-row" href="{{ url_for('book_detail', book_id=book.id) }}">
+        <strong>{{ book.title }}</strong><span>{{ book.author }}</span>
+      </a>
+    {% else %}
+      <p class="empty">当前没有阅读中的书籍。</p>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

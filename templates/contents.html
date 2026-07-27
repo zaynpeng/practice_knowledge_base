@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}内容库 - 实践型知识库{% endblock %}
+{% block content %}
+<section class="page-head"><h1>内容库</h1><a class="button primary" href="{{ url_for('capture') }}">新增收藏</a></section>
+<form class="filters" method="get">
+  <input name="q" value="{{ q }}" placeholder="搜索内容">
+  <select name="status"><option value="">全部状态</option>{% for s in statuses %}<option value="{{ s }}" {% if status==s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select>
+  <button class="button">筛选</button>
+</form>
+<section class="panel list">
+{% for row in rows %}
+  <a class="list-row" href="{{ url_for('content_detail', content_id=row.id) }}">
+    <strong>{{ row.title }}</strong><span>{{ row.content_type }} · {{ row.status }} · {{ row.extraction_status }}</span>
+    <small>{{ (row.save_reason or '')[:100] }}</small>
+  </a>
+{% else %}<p class="empty">还没有内容。</p>{% endfor %}
+</section>
+{% endblock %}

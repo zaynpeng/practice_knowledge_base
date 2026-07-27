@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}读书感悟 - 实践型知识库{% endblock %}
+{% block content %}
+<section class="page-head"><h1>读书感悟</h1><p>记录原文观点、我的理解、关联经历和下一步行动。</p></section>
+<form class="form panel" method="post">
+  <label>关联书籍<select name="book_id"><option value="">暂不关联</option>{% for b in books %}<option value="{{ b.id }}">{{ b.title }}</option>{% endfor %}</select></label>
+  <label>章节或页码<input name="chapter_or_page"></label>
+  <label>关联问题<select name="problem_id"><option value="">暂不关联</option>{% for p in problems %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}</select></label>
+  <label class="important">原文观点<textarea name="source_idea" rows="4"></textarea></label>
+  <label class="important">我的理解<textarea name="user_understanding" rows="4"></textarea></label>
+  <label>它与我哪些经历有关<textarea name="related_experience" rows="3"></textarea></label>
+  <label>我准备怎么用<textarea name="planned_action" rows="3"></textarea></label>
+  <label class="check"><input type="checkbox" name="convert_to_experiment" value="1"> 转为实践</label>
+  <button class="button primary">保存感悟</button>
+</form>
+<section class="panel list">{% for row in rows %}<div class="list-row"><strong>{{ row.book_title or '未关联书籍' }} · {{ row.chapter_or_page or '' }}</strong><span>{{ row.created_at }}</span><small>{{ (row.user_understanding or '')[:120] }}</small><form method="post" action="{{ url_for('export_markdown', entity='note', entity_id=row.id) }}"><button class="button small">导出 Markdown</button></form></div>{% else %}<p class="empty">还没有读书感悟。</p>{% endfor %}</section>
+{% endblock %}
