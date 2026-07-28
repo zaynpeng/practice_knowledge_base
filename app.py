@@ -351,6 +351,38 @@ def clean_text(value: str) -> str:
     return "\n".join(line for line in lines if line)
 
 
+def build_extractive_summary(raw_text: str, max_chars: int = 450) -> str:
+    text = clean_text(raw_text)
+    if not text:
+        return ""
+    units = []
+    for paragraph in text.splitlines():
+        paragraph = paragraph.strip()
+        if not paragraph:
+            continue
+        sentences = re.split(r"(?<=[。！？!?])\s*", paragraph)
+        for sentence in sentences:
+            sentence = sentence.strip()
+            if sentence:
+                units.append(sentence)
+    if not units:
+        units = [text]
+    selected = []
+    total = 0
+    for unit in units:
+        if len(unit) < 8 and selected:
+            continue
+        extra = len(unit) + (1 if selected else 0)
+        if selected and total + extra > max_chars:
+            break
+        if not selected and len(unit) > max_chars:
+            return unit[:max_chars] + "..."
+        selected.append(unit)
+        total += extra
+    summary = "\n".join(selected).strip()
+    return summary + ("..." if len(summary) < len(text) and len(summary) >= max_chars - 20 else "")
+
+
 def blocked_wechat_text(text: str) -> str:
     abnormal_phrases = ["参数错误", "当前环境异常", "完成验证后即可继续访问", "请在微信客户端打开链接", "访问过于频繁"]
     return next((phrase for phrase in abnormal_phrases if phrase in text), "")
@@ -375,7 +407,7 @@ def extract_wechat_article(url: str, html_text: str) -> dict | None:
     content_node = soup.select_one("#js_content") or soup.select_one(".rich_media_content")
     raw_text = clean_text(content_node.get_text("\n", strip=True)) if content_node else ""
     if raw_text:
-        summary = raw_text[:450] + ("..." if len(raw_text) > 450 else "")
+        summary = build_extractive_summary(raw_text)
         return {
             "status": "读取成功",
             "error": "",
@@ -431,7 +463,7 @@ def extract_url(url: str) -> dict:
         raw_text = "\n".join([p for p in paragraphs if len(p) > 12])
         if not raw_text:
             return empty | {"status": "部分读取成功", "error": "页面可访问，但未提取到正文。", "title": title, "raw_text": "", "summary": ""}
-        summary = raw_text[:450] + ("..." if len(raw_text) > 450 else "")
+        summary = build_extractive_summary(raw_text)
         return empty | {"status": "读取成功", "error": "", "title": title, "raw_text": raw_text[:50000], "summary": summary}
     except Exception as exc:
         return empty | {"status": "读取失败", "error": str(exc), "title": "", "raw_text": "", "summary": ""}
@@ -522,7 +554,7 @@ def capture():
                 form_value("source_platform") or extracted.get("source_platform", ""),
                 form_value("published_at") or extracted.get("published_at", ""),
                 source_text or extracted["raw_text"],
-                form_value("summary") or structured.get("summary") or extracted["summary"],
+                form_value("summary") or structured.get("summary") or extracted["summary"] or build_extractive_summary(source_text or extracted["raw_text"]),
                 extracted["status"],
                 extracted["error"],
                 "url" if url else "manual",
@@ -573,6 +605,15 @@ def contents():
 @app.route("/contents/<int:content_id>", methods=["GET", "POST"])
 def content_detail(content_id: int):
     if request.method == "POST":
+        existing = query_one("SELECT summary, raw_text FROM contents WHERE id=? AND deleted_at IS NULL", (content_id,))
+        raw_text = form_value("raw_text")
+        summary = form_value("summary")
+        if form_value("refresh_summary") == "1":
+            new_summary = build_extractive_summary(raw_text)
+            if new_summary:
+                summary = new_summary
+        elif existing and raw_text != (existing["raw_text"] or "") and summary == (existing["summary"] or ""):
+            summary = build_extractive_summary(raw_text) or summary
         execute(
             """
             UPDATE contents SET content_type=?,title=?,url=?,author=?,source_platform=?,published_at=?,raw_text=?,summary=?,tools=?,methods=?,
@@ -586,8 +627,8 @@ def content_detail(content_id: int):
                 form_value("author"),
                 form_value("source_platform"),
                 form_value("published_at"),
-                form_value("raw_text"),
-                form_value("summary"),
+                raw_text,
+                summary,
                 form_value("tools"),
                 form_value("methods"),
                 form_value("suggested_category"),

@@ -48,6 +48,45 @@ def main() -> None:
     assert "减少客户选择成本".encode("utf-8") in response.data
 
     response = client.post(
+        "/capture",
+        data={
+            "source_text": "旧正文第一句。旧正文第二句。",
+            "personal_note": "感想：先保存一条内容。为什么有用：用于测试。打算怎么用：检查摘要刷新。",
+            "summary": "旧摘要",
+        },
+        follow_redirects=True,
+    )
+    assert response.status_code == 200
+    content_id = int(response.request.path.rsplit("/", 1)[-1])
+    response = client.post(
+        f"/contents/{content_id}",
+        data={
+            "content_type": "article",
+            "title": "摘要刷新测试",
+            "url": "",
+            "author": "",
+            "source_platform": "",
+            "published_at": "",
+            "summary": "旧摘要",
+            "tools": "",
+            "methods": "",
+            "suggested_category": "",
+            "applicable_scenarios": "",
+            "user_reflection": "先保存一条内容",
+            "save_reason": "用于测试",
+            "problem_statement": "",
+            "intended_use": "检查摘要刷新",
+            "status": "待判断",
+            "raw_text": "新正文第一句，应该进入摘要。新正文第二句，继续作为摘取式摘要。",
+            "refresh_summary": "1",
+        },
+        follow_redirects=True,
+    )
+    assert response.status_code == 200
+    assert "新正文第一句".encode("utf-8") in response.data
+    assert "旧摘要".encode("utf-8") not in response.data
+
+    response = client.post(
         "/experiments",
         data={"title": "校验失败示例", "status": "已验证"},
         follow_redirects=True,

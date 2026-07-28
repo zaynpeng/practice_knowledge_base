@@ -10,6 +10,7 @@
   <label>状态<select name="status">{% for s in statuses %}<option value="{{ s }}" {% if row.status==s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></label>
   <h2 class="wide">AI 建议</h2>
   <label>摘要<textarea name="summary" rows="4">{{ row.summary or '' }}</textarea></label><label>涉及工具<textarea name="tools" rows="4">{{ row.tools or '' }}</textarea></label>
+  <label class="check"><input type="checkbox" name="refresh_summary" value="1" checked> 保存时根据当前正文更新摘要</label>
   <label>涉及方法<textarea name="methods" rows="4">{{ row.methods or '' }}</textarea></label><label>可能适用场景<textarea name="applicable_scenarios" rows="4">{{ row.applicable_scenarios or '' }}</textarea></label>
   <label>建议分类<input name="suggested_category" value="{{ row.suggested_category or '' }}"></label>
   <h2 class="wide">用户判断</h2>
