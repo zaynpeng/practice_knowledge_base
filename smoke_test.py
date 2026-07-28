@@ -14,6 +14,10 @@ def main() -> None:
         response = client.get(path)
         assert response.status_code == 200, f"{path} returned {response.status_code}"
 
+    response = client.post("/settings/test-ai", json={"ai_model": "deepseek-chat", "ai_api_url": "https://api.deepseek.com", "ai_api_key": ""})
+    assert response.status_code == 400
+    assert "API Key".encode("utf-8") in response.data
+
     response = client.post(
         "/capture",
         data={

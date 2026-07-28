@@ -43,6 +43,15 @@ PROBLEM_STATUSES = ["待处理", "正在探索", "正在实践", "已有方案",
 BOOK_RELATIONSHIPS = ["", "当前需要", "近期可读", "参考工具书", "同类重复", "兴趣阅读", "暂不投入"]
 READING_STATUSES = ["未开始", "准备阅读", "阅读中", "暂停", "已完成", "仅查阅", "放弃"]
 PRIORITIES = ["", "高", "中", "低", "未判断"]
+MODEL_PRESETS = [
+    {"label": "未启用", "provider": "", "model": "", "base_url": ""},
+    {"label": "OpenAI · gpt-4o-mini", "provider": "OpenAI", "model": "gpt-4o-mini", "base_url": "https://api.openai.com/v1"},
+    {"label": "OpenAI · gpt-4.1-mini", "provider": "OpenAI", "model": "gpt-4.1-mini", "base_url": "https://api.openai.com/v1"},
+    {"label": "DeepSeek · deepseek-chat", "provider": "DeepSeek", "model": "deepseek-chat", "base_url": "https://api.deepseek.com"},
+    {"label": "DeepSeek · deepseek-reasoner", "provider": "DeepSeek", "model": "deepseek-reasoner", "base_url": "https://api.deepseek.com"},
+    {"label": "Kimi · moonshot-v1-8k", "provider": "Kimi", "model": "moonshot-v1-8k", "base_url": "https://api.moonshot.cn/v1"},
+    {"label": "自定义 OpenAI Compatible", "provider": "自定义 OpenAI Compatible API", "model": "", "base_url": ""},
+]
 
 app = Flask(__name__)
 app.secret_key = "local-practice-knowledge-base"
@@ -144,6 +153,51 @@ def parse_json_object(text: str) -> dict:
     return data if isinstance(data, dict) else {}
 
 
+def normalize_space(value: str) -> str:
+    return re.sub(r"\s+", "", value or "").lower()
+
+
+def has_source_evidence(value: str, source: str) -> bool:
+    value = (value or "").strip()
+    if not value:
+        return False
+    return normalize_space(value) in normalize_space(source)
+
+
+def keep_supported_text(value: str, source: str) -> str:
+    value = (value or "").strip()
+    if not value:
+        return ""
+    if has_source_evidence(value, source):
+        return value
+    parts = re.split(r"[，,；;\n、]+", value)
+    kept = [part.strip() for part in parts if part.strip() and has_source_evidence(part.strip(), source)]
+    return "；".join(kept)
+
+
+def normalize_ai_structured_result(data: dict, source_text: str, personal_note: str) -> dict:
+    evidence = f"{source_text}\n{personal_note}"
+    normalized = {}
+    evidence_fields = [
+        "title",
+        "summary",
+        "tools",
+        "methods",
+        "suggested_category",
+        "applicable_scenarios",
+        "user_reflection",
+        "save_reason",
+        "problem_statement",
+        "intended_use",
+    ]
+    for key in evidence_fields:
+        normalized[key] = keep_supported_text(str(data.get(key, "")), evidence)
+    content_type = data.get("content_type")
+    normalized["content_type"] = content_type if content_type in ["article", "tool", "idea", "video", "other"] else ""
+    normalized["wants_practice"] = bool(data.get("wants_practice"))
+    return normalized
+
+
 def local_structure_personal_note(personal_note: str) -> dict:
     note = (personal_note or "").strip()
     fields = {
@@ -182,9 +236,7 @@ def ai_structure_input(source_text: str, personal_note: str) -> tuple[dict, str]
     if not api_key or not model or not api_url:
         return {}, "未配置 AI API，已使用本地规则拆分。"
 
-    endpoint = api_url.rstrip("/")
-    if not endpoint.endswith("/chat/completions"):
-        endpoint = f"{endpoint}/chat/completions"
+    endpoint = chat_completions_endpoint(api_url)
     prompt = f"""
 你是一个本地实践型知识库的结构化助手。请只基于用户提供的信息拆分字段，不要编造事实。
 返回严格 JSON，不要 Markdown。
@@ -197,8 +249,12 @@ user_reflection, save_reason, problem_statement, intended_use, content_type, wan
 - content_type 只能是 article/tool/idea/video/other
 - wants_practice 是布尔值
 - 不确定就留空字符串
-- summary/tools/methods/category/scenarios 是 AI 建议
-- user_reflection/save_reason/problem_statement/intended_use 必须来自用户个人输入的含义，不要凭空补充
+- 所有文本字段必须从“链接或原文”或“用户个人输入”中摘取原句、短语或可连续定位的片段
+- 不要改写、不要总结成原文没有的表达、不要根据常识补充
+- summary 也只能使用原文中的关键句拼接，不能重新概括
+- tools/methods/category/scenarios 只提取原文明确出现的名称或短语
+- user_reflection/save_reason/problem_statement/intended_use 必须来自用户个人输入的原句或短语
+- 如果找不到原文依据，字段留空
 
 链接或原文：
 {source_text[:8000]}
@@ -207,25 +263,30 @@ user_reflection, save_reason, problem_statement, intended_use, content_type, wan
 {personal_note[:4000]}
 """
     try:
-        response = requests.post(
-            endpoint,
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={
-                "model": model,
-                "messages": [
-                    {"role": "system", "content": "你只输出 JSON 对象。"},
-                    {"role": "user", "content": prompt},
-                ],
-                "temperature": 0.2,
-            },
-            timeout=20,
-        )
-        response.raise_for_status()
-        payload = response.json()
+        payload = call_chat_api(endpoint, api_key, model, [{"role": "system", "content": "你只输出 JSON 对象。"}, {"role": "user", "content": prompt}], timeout=20)
         content = payload["choices"][0]["message"]["content"]
-        return parse_json_object(content), "AI 已完成结构化拆分。"
+        data = normalize_ai_structured_result(parse_json_object(content), source_text, personal_note)
+        return data, "AI 已完成结构化拆分，且已过滤无原文依据的字段。"
     except Exception as exc:
         return {}, f"AI 拆分失败，已使用本地规则拆分：{exc}"
+
+
+def chat_completions_endpoint(api_url: str) -> str:
+    endpoint = api_url.rstrip("/")
+    if not endpoint.endswith("/chat/completions"):
+        endpoint = f"{endpoint}/chat/completions"
+    return endpoint
+
+
+def call_chat_api(endpoint: str, api_key: str, model: str, messages: list[dict], timeout: int = 20) -> dict:
+    response = requests.post(
+        endpoint,
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        json={"model": model, "messages": messages, "temperature": 0},
+        timeout=timeout,
+    )
+    response.raise_for_status()
+    return response.json()
 
 
 def structure_capture_input(source_text: str, personal_note: str) -> tuple[dict, str]:
@@ -899,12 +960,46 @@ def soft_delete(entity: str, entity_id: int):
 @app.route("/settings", methods=["GET", "POST"])
 def settings():
     if request.method == "POST":
-        for key in ["ai_provider", "ai_api_url", "ai_api_key", "ai_model"]:
-            execute("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, form_value(key)))
+        selected_model = form_value("ai_model")
+        preset = next((item for item in MODEL_PRESETS if item["model"] == selected_model), None)
+        values = {
+            "ai_provider": form_value("ai_provider"),
+            "ai_api_url": form_value("ai_api_url"),
+            "ai_api_key": form_value("ai_api_key"),
+            "ai_model": selected_model,
+        }
+        if preset:
+            values["ai_provider"] = preset["provider"]
+            if preset["base_url"] and not values["ai_api_url"]:
+                values["ai_api_url"] = preset["base_url"]
+        for key, value in values.items():
+            execute("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, value))
         flash("设置已保存。AI 仍只作为建议，不会自动覆盖人工判断。", "success")
         return redirect(url_for("settings"))
     rows = {r["key"]: r["value"] for r in query_all("SELECT key,value FROM settings")}
-    return render_template("settings.html", settings=rows)
+    return render_template("settings.html", settings=rows, model_presets=MODEL_PRESETS)
+
+
+@app.post("/settings/test-ai")
+def test_ai_settings():
+    data = request.get_json(silent=True) or request.form
+    api_key = (data.get("ai_api_key") or "").strip()
+    api_url = (data.get("ai_api_url") or "").strip()
+    model = (data.get("ai_model") or "").strip()
+    if not api_key or not api_url or not model:
+        return jsonify({"ok": False, "message": "请先选择模型并填写 API Key。"}), 400
+    try:
+        payload = call_chat_api(
+            chat_completions_endpoint(api_url),
+            api_key,
+            model,
+            [{"role": "user", "content": "请只回复 ok"}],
+            timeout=12,
+        )
+        content = payload.get("choices", [{}])[0].get("message", {}).get("content", "")
+        return jsonify({"ok": True, "message": f"连接成功：{content[:40] or '模型已响应'}"})
+    except Exception as exc:
+        return jsonify({"ok": False, "message": f"连接失败：{exc}"}), 400
 
 
 @app.route("/api/search")

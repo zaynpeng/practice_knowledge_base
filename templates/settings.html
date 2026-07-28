@@ -1,16 +1,26 @@
 {% extends "base.html" %}
 {% block title %}设置 - 实践型知识库{% endblock %}
 {% block content %}
-<section class="page-head"><h1>设置</h1><p>AI 是可选建议模块；未配置时，核心手动功能照常使用。</p></section>
-<form class="form panel" method="post">
-  <label>服务商<select name="ai_provider">
-    {% for p in ['','OpenAI','ChatGPT API Compatible','DeepSeek','Kimi','自定义 OpenAI Compatible API'] %}
-      <option value="{{ p }}" {% if settings.get('ai_provider')==p %}selected{% endif %}>{{ p or '未启用' }}</option>
-    {% endfor %}
-  </select></label>
-  <label>API URL<input name="ai_api_url" value="{{ settings.get('ai_api_url','') }}"></label>
-  <label>API Key<input name="ai_api_key" type="password" value="{{ settings.get('ai_api_key','') }}"></label>
-  <label>模型名称<input name="ai_model" value="{{ settings.get('ai_model','') }}"></label>
-  <button class="button primary">保存设置</button>
+<section class="page-head"><h1>设置</h1><p>选择模型后自动带入 Base URL；用户只需要填写 API Key 并测试连接。</p></section>
+<form class="form panel" method="post" id="aiSettingsForm">
+  <label>模型
+    <select name="ai_model" id="aiModelSelect">
+      {% for item in model_presets %}
+        <option value="{{ item.model }}" data-provider="{{ item.provider }}" data-base-url="{{ item.base_url }}" {% if settings.get('ai_model')==item.model %}selected{% endif %}>{{ item.label }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>服务商<input name="ai_provider" id="aiProvider" value="{{ settings.get('ai_provider','') }}" readonly></label>
+  <label>Base URL<input name="ai_api_url" id="aiBaseUrl" value="{{ settings.get('ai_api_url','') }}" placeholder="选择模型后自动带入；自定义模型可手动填写"></label>
+  <label>API Key<input name="ai_api_key" id="aiApiKey" type="password" value="{{ settings.get('ai_api_key','') }}" placeholder="只保存在本地 SQLite"></label>
+  <div class="wide actions">
+    <button class="button primary">保存设置</button>
+    <button class="button" type="button" id="testAiButton">测试连接</button>
+    <span id="testAiResult" class="muted-text"></span>
+  </div>
 </form>
+<section class="panel">
+  <h2>结构化规则</h2>
+  <p>AI 只能从链接正文、原文或用户输入中摘取已有文字。后端会过滤没有原文依据的字段，避免把推测写成事实。</p>
+</section>
 {% endblock %}
