@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>实践型知识库启动页</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      font-family: "Segoe UI", "Microsoft YaHei", Arial, sans-serif;
+      background: #f6f5f2;
+      color: #252525;
+    }
+    main {
+      width: min(680px, calc(100% - 40px));
+      background: #fff;
+      border: 1px solid #dedbd3;
+      border-radius: 8px;
+      padding: 28px;
+    }
+    h1 { margin: 0 0 12px; font-size: 28px; }
+    p { color: #6b6f76; line-height: 1.7; }
+    a, code { color: #2f6f6d; }
+    .button {
+      display: inline-flex;
+      margin-top: 10px;
+      padding: 10px 14px;
+      border-radius: 6px;
+      background: #2f6f6d;
+      color: #fff;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>实践型知识库</h1>
+    <p>这个页面只是启动提示。请不要直接打开 <code>templates/*.html</code>，那些是 Flask 模板文件，直接打开会显示模板源码且没有样式。</p>
+    <p>请双击项目里的 <code>start.bat</code> 启动本地服务，然后访问：</p>
+    <a class="button" href="http://127.0.0.1:5000/">打开应用首页</a>
+  </main>
+</body>
+</html>
