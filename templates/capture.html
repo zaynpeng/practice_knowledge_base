@@ -1,17 +1,24 @@
 {% extends "base.html" %}
 {% block title %}快速收藏 - 实践型知识库{% endblock %}
 {% block content %}
-<section class="page-head"><h1>快速收藏</h1><p>先写下自己的触动，再让系统辅助提取。</p></section>
+<section class="page-head"><h1>快速收藏</h1><p>只要填链接或原文，再把自己的想法写成一段话，系统会拆成结构化字段。</p></section>
 <form class="form panel" method="post" enctype="multipart/form-data">
   <div class="wide"><label>链接<input name="url" placeholder="https://"></label></div>
+  <label class="wide important">链接正文或原文<textarea name="source_text" rows="8" placeholder="可以粘贴文章正文、工具介绍、方法论原文。若只填链接并勾选读取，系统会尝试自动补正文。"></textarea></label>
+  <label class="wide important">我的想法<textarea name="personal_note" rows="7" required placeholder="例：这篇对我有触动，因为它能解决报价后客户不回复的问题。我打算下次报价时先给推荐方案，再给备选项，用一周测试回复率。"></textarea></label>
   <label>类型<select name="content_type"><option value="article">文章</option><option value="tool">工具</option><option value="idea">想法</option><option value="video">视频</option><option value="other">其他</option></select></label>
-  <label>标题<input name="title" placeholder="可留空，系统尝试提取"></label>
-  <label class="important">我的感触<textarea name="user_reflection" rows="4" required></textarea></label>
-  <label class="important">为什么收藏<textarea name="save_reason" rows="4" placeholder="不填写时状态会是“待补充”"></textarea></label>
-  <label>它可能解决什么问题<textarea name="problem_statement" rows="3"></textarea></label>
-  <label>我准备怎么使用<textarea name="intended_use" rows="3"></textarea></label>
+  <label>标题<input name="title" placeholder="可留空，AI 或网页读取会尝试补全"></label>
+  <details class="wide">
+    <summary>手动覆盖结构化字段</summary>
+    <div class="form nested">
+      <label>我的感触<textarea name="user_reflection" rows="3"></textarea></label>
+      <label>为什么收藏<textarea name="save_reason" rows="3"></textarea></label>
+      <label>它可能解决什么问题<textarea name="problem_statement" rows="3"></textarea></label>
+      <label>我准备怎么使用<textarea name="intended_use" rows="3"></textarea></label>
+      <label>手动摘要<textarea name="summary" rows="3"></textarea></label>
+    </div>
+  </details>
   <label>关联已有问题<select name="problem_id"><option value="">暂不关联</option>{% for p in problems %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}</select></label>
-  <label>手动粘贴正文<textarea name="raw_text" rows="6"></textarea></label>
   <label>附件<input type="file" name="attachments" multiple></label>
   <label class="check"><input type="checkbox" name="try_extract" value="1" checked> 尝试读取标题和正文</label>
   <label class="check"><input type="checkbox" name="wants_practice" value="1"> 明确准备实践，并生成实践记录</label>

@@ -119,6 +119,22 @@ p { color: var(--muted); }
   margin-bottom: 18px;
 }
 .form h2, .form .wide, .form .check, .form button { grid-column: 1 / -1; }
+.focus-form {
+  border-color: #bdd7d1;
+  background: #fbfefd;
+}
+.nested {
+  margin: 12px 0 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fafafa;
+}
+details summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-weight: 600;
+}
 .important textarea, .important input { border-color: #b9975b; background: #fffaf0; }
 .filters, .compact { display: flex; gap: 10px; align-items: center; margin-bottom: 18px; flex-wrap: wrap; }
 .filters input { max-width: 320px; }

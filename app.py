@@ -4,6 +4,7 @@ import csv
 import json
 import mimetypes
 import os
+import re
 import shutil
 import sqlite3
 from datetime import datetime
@@ -114,10 +115,127 @@ def form_value(name: str) -> str:
     return request.form.get(name, "").strip()
 
 
+def looks_like_url(value: str) -> bool:
+    parsed = urlparse((value or "").strip())
+    return parsed.scheme in ["http", "https"] and bool(parsed.netloc)
+
+
 def content_status(save_reason: str, wants_practice: bool) -> str:
     if not save_reason:
         return "待补充"
     return "待实践" if wants_practice else "待判断"
+
+
+def settings_dict() -> dict:
+    return {r["key"]: r["value"] for r in query_all("SELECT key,value FROM settings")}
+
+
+def parse_json_object(text: str) -> dict:
+    text = (text or "").strip()
+    if not text:
+        return {}
+    match = re.search(r"\{.*\}", text, re.S)
+    if not match:
+        return {}
+    try:
+        data = json.loads(match.group(0))
+    except json.JSONDecodeError:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def local_structure_personal_note(personal_note: str) -> dict:
+    note = (personal_note or "").strip()
+    fields = {
+        "user_reflection": note,
+        "save_reason": "",
+        "problem_statement": "",
+        "intended_use": "",
+        "content_type": "article",
+        "wants_practice": False,
+    }
+    if not note:
+        return fields
+
+    patterns = {
+        "save_reason": [r"(?:为什么(?:有用|收藏|值得)|有用(?:是)?因为|价值在于)[：:，,\s]*(.+)"],
+        "intended_use": [r"(?:打算|准备|计划)(?:怎么|如何)?(?:用|使用|实践|应用)[：:，,\s]*(.+)"],
+        "problem_statement": [r"(?:解决|应对|处理)(?:什么|的)?问题[：:，,\s]*(.+)", r"(?:问题是|痛点是)[：:，,\s]*(.+)"],
+        "user_reflection": [r"(?:感想|感触|启发|触动)[：:，,\s]*(.+)"],
+    }
+    for key, options in patterns.items():
+        for pattern in options:
+            match = re.search(pattern, note, re.I)
+            if match:
+                fields[key] = match.group(1).strip()
+                break
+    if re.search(r"(试试|实践|测试|验证|马上用|这周用|明天用)", note):
+        fields["wants_practice"] = True
+    return fields
+
+
+def ai_structure_input(source_text: str, personal_note: str) -> tuple[dict, str]:
+    settings = settings_dict()
+    api_key = (settings.get("ai_api_key") or "").strip()
+    model = (settings.get("ai_model") or "").strip()
+    api_url = (settings.get("ai_api_url") or "").strip()
+    if not api_key or not model or not api_url:
+        return {}, "未配置 AI API，已使用本地规则拆分。"
+
+    endpoint = api_url.rstrip("/")
+    if not endpoint.endswith("/chat/completions"):
+        endpoint = f"{endpoint}/chat/completions"
+    prompt = f"""
+你是一个本地实践型知识库的结构化助手。请只基于用户提供的信息拆分字段，不要编造事实。
+返回严格 JSON，不要 Markdown。
+
+字段：
+title, summary, tools, methods, suggested_category, applicable_scenarios,
+user_reflection, save_reason, problem_statement, intended_use, content_type, wants_practice
+
+要求：
+- content_type 只能是 article/tool/idea/video/other
+- wants_practice 是布尔值
+- 不确定就留空字符串
+- summary/tools/methods/category/scenarios 是 AI 建议
+- user_reflection/save_reason/problem_statement/intended_use 必须来自用户个人输入的含义，不要凭空补充
+
+链接或原文：
+{source_text[:8000]}
+
+用户个人输入：
+{personal_note[:4000]}
+"""
+    try:
+        response = requests.post(
+            endpoint,
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": "你只输出 JSON 对象。"},
+                    {"role": "user", "content": prompt},
+                ],
+                "temperature": 0.2,
+            },
+            timeout=20,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        content = payload["choices"][0]["message"]["content"]
+        return parse_json_object(content), "AI 已完成结构化拆分。"
+    except Exception as exc:
+        return {}, f"AI 拆分失败，已使用本地规则拆分：{exc}"
+
+
+def structure_capture_input(source_text: str, personal_note: str) -> tuple[dict, str]:
+    local = local_structure_personal_note(personal_note)
+    ai, message = ai_structure_input(source_text, personal_note)
+    if not ai:
+        return local, message
+    structured = local | {k: v for k, v in ai.items() if v not in [None, ""]}
+    structured["wants_practice"] = bool(ai.get("wants_practice", local["wants_practice"]))
+    return structured, message
 
 
 def unique_path(folder: Path, name: str) -> Path:
@@ -219,34 +337,45 @@ def index():
 def capture():
     if request.method == "POST":
         url = form_value("url")
-        wants_practice = form_value("wants_practice") == "1"
+        source_text = form_value("source_text") or form_value("raw_text")
+        if not url and looks_like_url(source_text):
+            url = source_text
+            source_text = ""
+        personal_note = form_value("personal_note")
+        structured, structure_message = structure_capture_input(source_text or url, personal_note)
+        wants_practice = form_value("wants_practice") == "1" or bool(structured.get("wants_practice"))
         extracted = extract_url(url) if form_value("try_extract") == "1" else {"status": "仅保存链接", "error": "", "title": "", "raw_text": "", "summary": ""}
-        title = form_value("title") or extracted["title"] or urlparse(url).netloc or "未命名内容"
-        save_reason = form_value("save_reason")
+        title = form_value("title") or structured.get("title") or extracted["title"] or urlparse(url).netloc or "未命名内容"
+        save_reason = form_value("save_reason") or structured.get("save_reason", "")
         status = content_status(save_reason, wants_practice)
         content_id = execute(
             """
             INSERT INTO contents(content_type,title,url,author,source_platform,published_at,raw_text,summary,extraction_status,
-              extraction_error,content_source,user_reflection,save_reason,problem_statement,intended_use,status,created_at,updated_at)
-            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+              extraction_error,content_source,user_reflection,save_reason,problem_statement,intended_use,status,tools,methods,suggested_category,
+              applicable_scenarios,created_at,updated_at)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
-                form_value("content_type") or "article",
+                form_value("content_type") or structured.get("content_type") or "article",
                 title,
                 url,
                 form_value("author"),
                 form_value("source_platform"),
                 form_value("published_at"),
-                form_value("raw_text") or extracted["raw_text"],
-                extracted["summary"],
+                source_text or extracted["raw_text"],
+                form_value("summary") or structured.get("summary") or extracted["summary"],
                 extracted["status"],
                 extracted["error"],
                 "url" if url else "manual",
-                form_value("user_reflection"),
+                form_value("user_reflection") or structured.get("user_reflection") or personal_note,
                 save_reason,
-                form_value("problem_statement"),
-                form_value("intended_use"),
+                form_value("problem_statement") or structured.get("problem_statement", ""),
+                form_value("intended_use") or structured.get("intended_use", ""),
                 status,
+                structured.get("tools", ""),
+                structured.get("methods", ""),
+                structured.get("suggested_category", ""),
+                structured.get("applicable_scenarios", ""),
                 now(),
                 now(),
             ),
@@ -258,9 +387,9 @@ def capture():
         if wants_practice:
             execute(
                 "INSERT INTO experiments(title,content_id,problem_id,goal,current_problem,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)",
-                (title, content_id, problem_id or None, form_value("intended_use"), form_value("problem_statement"), "待实践", now(), now()),
+                (title, content_id, problem_id or None, form_value("intended_use") or structured.get("intended_use", ""), form_value("problem_statement") or structured.get("problem_statement", ""), "待实践", now(), now()),
             )
-        flash(f"已保存内容。提取状态：{extracted['status']}", "success" if extracted["status"] != "读取失败" else "warning")
+        flash(f"已保存内容。提取状态：{extracted['status']}；{structure_message}", "success" if extracted["status"] != "读取失败" else "warning")
         return redirect(url_for("content_detail", content_id=content_id))
     problems = query_all("SELECT id,name FROM problems WHERE deleted_at IS NULL ORDER BY updated_at DESC")
     return render_template("capture.html", problems=problems, statuses=CONTENT_STATUSES)

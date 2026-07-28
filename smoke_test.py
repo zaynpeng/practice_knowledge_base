@@ -15,6 +15,18 @@ def main() -> None:
         assert response.status_code == 200, f"{path} returned {response.status_code}"
 
     response = client.post(
+        "/capture",
+        data={
+            "source_text": "https://example.com/article",
+            "personal_note": "感想：这个思路提醒我要减少客户选择成本。为什么有用：它能解决报价后客户不回复的问题。打算怎么用：下次报价先给推荐方案，再给备选项。",
+            "try_extract": "",
+        },
+        follow_redirects=True,
+    )
+    assert response.status_code == 200
+    assert "减少客户选择成本".encode("utf-8") in response.data
+
+    response = client.post(
         "/experiments",
         data={"title": "校验失败示例", "status": "已验证"},
         follow_redirects=True,

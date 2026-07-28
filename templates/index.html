@@ -9,6 +9,19 @@
     <a class="button" href="{{ url_for('books') }}">录入一本书</a>
   </div>
 </section>
+<form class="form panel focus-form" method="post" action="{{ url_for('capture') }}">
+  <h2>快速记录</h2>
+  <label class="wide">链接或原文
+    <textarea name="source_text" rows="5" placeholder="可以粘贴链接，也可以直接粘贴原文。若是链接，也可以填到下面的链接框，系统会尝试读取正文。"></textarea>
+  </label>
+  <label class="wide">我的想法
+    <textarea name="personal_note" rows="6" required placeholder="把感想、为什么觉得有用、打算怎么用写在一起。AI 已配置时会自动拆分；未配置时使用本地规则拆分。"></textarea>
+  </label>
+  <label>链接<input name="url" placeholder="https://"></label>
+  <label>类型<select name="content_type"><option value="article">文章</option><option value="tool">工具</option><option value="idea">想法</option><option value="video">视频</option><option value="other">其他</option></select></label>
+  <label class="check"><input type="checkbox" name="try_extract" value="1" checked> 如果填写链接，尝试读取标题和正文</label>
+  <button class="button primary">保存并结构化</button>
+</form>
 <section class="grid five">
   <a class="metric" href="{{ url_for('contents', status='待补充') }}"><span>{{ stats.need_reason }}</span>待补充收藏原因</a>
   <a class="metric" href="{{ url_for('contents', status='待判断') }}"><span>{{ stats.need_judge }}</span>待判断内容</a>
