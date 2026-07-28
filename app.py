@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import html
 import json
 import mimetypes
 import os
@@ -176,22 +177,25 @@ def keep_supported_text(value: str, source: str) -> str:
 
 
 def normalize_ai_structured_result(data: dict, source_text: str, personal_note: str) -> dict:
-    evidence = f"{source_text}\n{personal_note}"
     normalized = {}
-    evidence_fields = [
+    source_fields = [
         "title",
         "summary",
         "tools",
         "methods",
         "suggested_category",
         "applicable_scenarios",
+    ]
+    personal_fields = [
         "user_reflection",
         "save_reason",
         "problem_statement",
         "intended_use",
     ]
-    for key in evidence_fields:
-        normalized[key] = keep_supported_text(str(data.get(key, "")), evidence)
+    for key in source_fields:
+        normalized[key] = keep_supported_text(str(data.get(key, "")), source_text)
+    for key in personal_fields:
+        normalized[key] = keep_supported_text(str(data.get(key, "")), personal_note)
     content_type = data.get("content_type")
     normalized["content_type"] = content_type if content_type in ["article", "tool", "idea", "video", "other"] else ""
     normalized["wants_practice"] = bool(data.get("wants_practice"))
@@ -308,13 +312,103 @@ def unique_path(folder: Path, name: str) -> Path:
     return folder / f"{stem}_{stamp()}{suffix}"
 
 
+def request_page(url: str) -> requests.Response:
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+    }
+    if "mp.weixin.qq.com" in url:
+        headers["Referer"] = "https://mp.weixin.qq.com/"
+    return requests.get(url, timeout=10, headers=headers)
+
+
+def meta_content(soup, *names: str) -> str:
+    for name in names:
+        node = soup.find("meta", attrs={"property": name}) or soup.find("meta", attrs={"name": name})
+        if node and node.get("content"):
+            return node["content"].strip()
+    return ""
+
+
+def script_var(html_text: str, name: str) -> str:
+    patterns = [
+        rf'var\s+{re.escape(name)}\s*=\s*"((?:\\.|[^"])*)"',
+        rf"var\s+{re.escape(name)}\s*=\s*'((?:\\.|[^'])*)'",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, html_text)
+        if match:
+            value = match.group(1)
+            if "\\" in value:
+                value = value.encode("utf-8").decode("unicode_escape", "ignore")
+            return html.unescape(value).strip()
+    return ""
+
+
+def clean_text(value: str) -> str:
+    lines = [re.sub(r"\s+", " ", line).strip() for line in (value or "").splitlines()]
+    return "\n".join(line for line in lines if line)
+
+
+def blocked_wechat_text(text: str) -> str:
+    abnormal_phrases = ["参数错误", "当前环境异常", "完成验证后即可继续访问", "请在微信客户端打开链接", "访问过于频繁"]
+    return next((phrase for phrase in abnormal_phrases if phrase in text), "")
+
+
+def extract_wechat_article(url: str, html_text: str) -> dict | None:
+    if "mp.weixin.qq.com" not in url or BeautifulSoup is None:
+        return None
+    soup = BeautifulSoup(html_text, "html.parser")
+    page_text = clean_text(soup.get_text("\n", strip=True))
+    blocked = blocked_wechat_text(page_text)
+    title = (
+        meta_content(soup, "og:title", "twitter:title")
+        or script_var(html_text, "msg_title")
+        or script_var(html_text, "nickname")
+    )
+    author = (
+        meta_content(soup, "author", "og:article:author")
+        or script_var(html_text, "nickname")
+    )
+    published_at = script_var(html_text, "publish_time")
+    content_node = soup.select_one("#js_content") or soup.select_one(".rich_media_content")
+    raw_text = clean_text(content_node.get_text("\n", strip=True)) if content_node else ""
+    if raw_text:
+        summary = raw_text[:450] + ("..." if len(raw_text) > 450 else "")
+        return {
+            "status": "读取成功",
+            "error": "",
+            "title": title,
+            "author": author,
+            "published_at": published_at,
+            "source_platform": "微信公众号",
+            "raw_text": raw_text[:50000],
+            "summary": summary,
+        }
+    error = f"微信公众号未返回正文"
+    if blocked:
+        error = f"微信公众号返回“{blocked}”，需要在浏览器或微信完成验证后手动粘贴原文。"
+    return {
+        "status": "读取失败",
+        "error": error,
+        "title": title,
+        "author": author,
+        "published_at": published_at,
+        "source_platform": "微信公众号",
+        "raw_text": "",
+        "summary": "",
+    }
+
+
 def extract_url(url: str) -> dict:
+    empty = {"status": "仅保存链接", "error": "", "title": "", "author": "", "source_platform": "", "published_at": "", "raw_text": "", "summary": ""}
     if not url:
-        return {"status": "仅保存链接", "error": "", "title": "", "raw_text": "", "summary": ""}
+        return empty
     try:
-        response = requests.get(url, timeout=8, headers={"User-Agent": "PracticeKnowledgeBase/1.0"})
+        response = request_page(url)
         response.raise_for_status()
-        response.encoding = response.apparent_encoding or response.encoding
+        response.encoding = response.encoding or response.apparent_encoding
         if BeautifulSoup is None:
             text = response.text
             title = ""
@@ -324,7 +418,10 @@ def extract_url(url: str) -> dict:
                 end = lower.find("</title>", start)
                 title = text[start:end].strip()[:300]
             raw_text = " ".join(text.replace("<", " <").replace(">", "> ").split())
-            return {"status": "部分读取成功", "error": "未安装 beautifulsoup4，仅完成基础文本读取。", "title": title, "raw_text": raw_text[:30000], "summary": raw_text[:450]}
+            return empty | {"status": "部分读取成功", "error": "未安装 beautifulsoup4，仅完成基础文本读取。", "title": title, "raw_text": raw_text[:30000], "summary": raw_text[:450]}
+        wechat = extract_wechat_article(url, response.text)
+        if wechat:
+            return empty | wechat
         soup = BeautifulSoup(response.text, "html.parser")
         for tag in soup(["script", "style", "nav", "footer", "aside", "form"]):
             tag.decompose()
@@ -333,11 +430,11 @@ def extract_url(url: str) -> dict:
         paragraphs = [p.get_text(" ", strip=True) for p in main.find_all(["p", "h1", "h2", "h3", "li"])]
         raw_text = "\n".join([p for p in paragraphs if len(p) > 12])
         if not raw_text:
-            return {"status": "部分读取成功", "error": "页面可访问，但未提取到正文。", "title": title, "raw_text": "", "summary": ""}
+            return empty | {"status": "部分读取成功", "error": "页面可访问，但未提取到正文。", "title": title, "raw_text": "", "summary": ""}
         summary = raw_text[:450] + ("..." if len(raw_text) > 450 else "")
-        return {"status": "读取成功", "error": "", "title": title, "raw_text": raw_text[:50000], "summary": summary}
+        return empty | {"status": "读取成功", "error": "", "title": title, "raw_text": raw_text[:50000], "summary": summary}
     except Exception as exc:
-        return {"status": "读取失败", "error": str(exc), "title": "", "raw_text": "", "summary": ""}
+        return empty | {"status": "读取失败", "error": str(exc), "title": "", "raw_text": "", "summary": ""}
 
 
 def save_attachments(entity_type: str, entity_id: int) -> None:
@@ -403,9 +500,10 @@ def capture():
             url = source_text
             source_text = ""
         personal_note = form_value("personal_note")
-        structured, structure_message = structure_capture_input(source_text or url, personal_note)
-        wants_practice = form_value("wants_practice") == "1" or bool(structured.get("wants_practice"))
         extracted = extract_url(url) if form_value("try_extract") == "1" else {"status": "仅保存链接", "error": "", "title": "", "raw_text": "", "summary": ""}
+        structure_source = source_text or extracted["raw_text"]
+        structured, structure_message = structure_capture_input(structure_source, personal_note)
+        wants_practice = form_value("wants_practice") == "1" or bool(structured.get("wants_practice"))
         title = form_value("title") or structured.get("title") or extracted["title"] or urlparse(url).netloc or "未命名内容"
         save_reason = form_value("save_reason") or structured.get("save_reason", "")
         status = content_status(save_reason, wants_practice)
@@ -420,9 +518,9 @@ def capture():
                 form_value("content_type") or structured.get("content_type") or "article",
                 title,
                 url,
-                form_value("author"),
-                form_value("source_platform"),
-                form_value("published_at"),
+                form_value("author") or extracted.get("author", ""),
+                form_value("source_platform") or extracted.get("source_platform", ""),
+                form_value("published_at") or extracted.get("published_at", ""),
                 source_text or extracted["raw_text"],
                 form_value("summary") or structured.get("summary") or extracted["summary"],
                 extracted["status"],

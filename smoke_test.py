@@ -9,6 +9,23 @@ def main() -> None:
     app_module.DB_PATH = Path(temp_dir.name) / "knowledge_test.db"
     app_module.init_db()
     client = app_module.app.test_client()
+    wechat_html = """
+    <html><head>
+      <meta property="og:title" content="公众号测试标题">
+      <meta name="author" content="测试作者">
+      <script>var publish_time = "2026-07-28";</script>
+    </head><body>
+      <div id="js_content">
+        <p>这是公众号原文第一段，用来验证正文提取。</p>
+        <p>这是公众号原文第二段，包含可执行的方法。</p>
+      </div>
+    </body></html>
+    """
+    extracted = app_module.extract_wechat_article("https://mp.weixin.qq.com/s/test", wechat_html)
+    assert extracted["status"] == "读取成功"
+    assert extracted["title"] == "公众号测试标题"
+    assert "公众号原文第一段".encode("utf-8") in extracted["raw_text"].encode("utf-8")
+
     paths = ["/", "/capture", "/contents", "/experiments", "/books", "/notes", "/problems", "/export", "/settings"]
     for path in paths:
         response = client.get(path)
